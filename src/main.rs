@@ -13,6 +13,7 @@ fn main() {
         .add_systems((
             update_acceleration,
             update_positions,
+            update_collisions,
             update_paths_system,
         ).chain().in_schedule(CoreSchedule::FixedUpdate))
         .run();
@@ -60,6 +61,12 @@ impl CurveSegment {
             CurveSegment::Line { .. } => f32::INFINITY,
         }
     }
+    fn angle(&self) -> f32 {
+        match self {
+            CurveSegment::Circle { angle, .. } => *angle,
+            CurveSegment::Line { .. } => 0.0,
+        }
+    }
 }
 
 #[derive(Component, Clone)]
@@ -86,6 +93,35 @@ fn update_acceleration(keys: Res<Input<KeyCode>>, mut query: Query<(&mut Radius)
     }
 }
 
+fn collide_segments(p1: &Vec2, s1: &CurveSegment, p2: &mut Vec2, s2: &CurveSegment) -> bool {
+    return false;
+}
+
+fn collide_curves(c1: &Curve, c2: &Curve) -> bool {
+    if c1.path.len() == 0 || c2.path.len() == 0 {
+        return false;
+    }
+    let s1 = c1.path.first().unwrap();
+    let p1 = c1.head;
+    let mut p2 = c2.head;
+    for s2 in &c2.path {
+        if collide_segments(&p1, s1, &mut p2, s2) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn update_collisions(mut query: Query<&Curve>) {
+    for c1 in query.iter() {
+        for c2 in query.iter() {
+            if collide_curves(c1, c2) {
+                println!("collision!");
+            }
+        }
+    }
+}
+
 fn update_positions(mut query: Query<(&mut Position, &mut Velocity, &mut Curve, &Radius)>) {
     for (mut p, mut v, mut c, r) in query.iter_mut() {
         let dt = TIMESTEP;
@@ -106,10 +142,10 @@ fn update_positions(mut query: Query<(&mut Position, &mut Velocity, &mut Curve, 
             let delta = (new_radius_vec - radius_vec)*r.0;
             *p = Position(p.0 + delta);
             *v = Velocity(new_radius_vec.perp()*v.0.length());
-            if c.path.len() == 0 || c.path.last().unwrap().radius() != r.0 {
+            if c.path.len() == 0 || c.path.last().unwrap().radius() != r.0 || (c.path.last().unwrap().angle() - angle).abs() >= 2.0*PI {
                 c.path.push(CurveSegment::Circle { 
                     center,
-                    radius: r.0,
+                    radius: r.0.abs(),
                     angle: -angle,
                 });
             } else {
@@ -121,7 +157,7 @@ fn update_positions(mut query: Query<(&mut Position, &mut Velocity, &mut Curve, 
                 };
                 *c.path.last_mut().unwrap() = CurveSegment::Circle {
                     center,
-                    radius: r.0,
+                    radius: r.0.abs(),
                     angle: -angle + last_angle,
                 };
             }
