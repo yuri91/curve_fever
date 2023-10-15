@@ -8,14 +8,14 @@ fn main() {
         .insert_resource(Msaa::Sample4)
         .insert_resource(FixedTime::new_from_secs(TIMESTEP))
         .add_plugins(DefaultPlugins)
-        .add_plugin(ShapePlugin)
-        .add_startup_system(setup_system)
-        .add_systems((
+        .add_plugins(ShapePlugin)
+        .add_systems(Startup, setup_system)
+        .add_systems(FixedUpdate, (
             update_acceleration,
             update_positions,
             update_collisions,
             update_paths_system,
-        ).chain().in_schedule(CoreSchedule::FixedUpdate))
+        ).chain())
         .run();
 }
 
