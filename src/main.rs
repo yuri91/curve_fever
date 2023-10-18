@@ -9,13 +9,16 @@ fn main() {
         .insert_resource(FixedTime::new_from_secs(TIMESTEP))
         .add_plugins(DefaultPlugins)
         .add_plugins(ShapePlugin)
-        .add_systems(Startup, setup_system)
+        .add_systems(Startup, setup)
         .add_systems(FixedUpdate, (
             update_acceleration,
             update_positions,
             update_collisions,
-            update_paths_system,
+            (update_lines, update_arcs, update_heads),
         ).chain())
+        .add_systems(PostUpdate, (
+            update_translation,
+        ))
         .run();
 }
 
@@ -68,7 +71,6 @@ impl Arc {
 
 #[derive(Component, Clone)]
 struct Head {
-    pos: Vec2,
     tail: Option<Entity>
 }
 
@@ -76,7 +78,7 @@ impl Head {
     fn to_path(&self) -> Path {
         GeometryBuilder::build_as(&Circle {
             radius: 10.,
-            center: self.pos,
+            center: Vec2::ZERO,
         })
     }
 }
@@ -112,6 +114,7 @@ fn update_positions(
 ) {
     for (mut p, mut v, mut h, r,) in query.iter_mut() {
         let dt = TIMESTEP;
+        let prev_pos = p.clone().0;
         if r.0.is_infinite() {
             *p = Position(p.0 + v.0*dt);
             if let Some(mut line) = h.tail.and_then(|t| q_lines.get_mut(t).ok()) {
@@ -119,7 +122,7 @@ fn update_positions(
             } else {
                 h.tail = Some(commands.spawn((
                     Line {
-                        from: h.pos,
+                        from: prev_pos,
                         to: p.0,
                     },
                 )).id());
@@ -138,7 +141,7 @@ fn update_positions(
             } else {
                 h.tail = Some(commands.spawn((
                     Arc {
-                        from: h.pos,
+                        from: prev_pos,
                         center,
                         radius: r.0.abs(),
                         angle,
@@ -146,14 +149,11 @@ fn update_positions(
                 )).id());
             }
         }
-        h.pos = p.0;
     }
 }
 
-fn update_paths_system(
+fn update_lines(
     q_lines: Query<(Entity, &Line,), Changed<Line>>,
-    q_arcs: Query<(Entity, &Arc,), Changed<Arc>>,
-    q_heads: Query<(Entity, &Head,), Changed<Head>>,
     mut commands: Commands,
 ) {
     for (e, l, ) in q_lines.iter() {
@@ -165,6 +165,11 @@ fn update_paths_system(
             Stroke::new(Color::BLACK, 3.0),
         ));
     }
+}
+fn update_arcs(
+    q_arcs: Query<(Entity, &Arc,), Changed<Arc>>,
+    mut commands: Commands,
+) {
     for (e, a, ) in q_arcs.iter() {
         commands.entity(e).insert((
             ShapeBundle {
@@ -174,6 +179,19 @@ fn update_paths_system(
             Stroke::new(Color::BLACK, 3.0),
         ));
     }
+}
+fn update_translation(
+    mut query: Query<(&mut Transform, &Position), Changed<Position>>,
+) {
+    for (mut t, p, ) in query.iter_mut() {
+        t.translation = p.0.extend(0.0);
+    }
+}
+
+fn update_heads(
+    q_heads: Query<(Entity, &Head, ), Changed<Head>>,
+    mut commands: Commands,
+) {
     for (e, h, ) in q_heads.iter() {
         commands.entity(e).insert((
             ShapeBundle {
@@ -185,11 +203,7 @@ fn update_paths_system(
     }
 }
 
-fn setup_system(mut commands: Commands) {
-    let head = Head {
-        pos: Vec2::ZERO,
-        tail: None,
-    };
+fn setup(mut commands: Commands) {
     commands.spawn(Camera2dBundle::default());
     commands.spawn((
         Name::new("Curve 1".to_owned()),
@@ -197,9 +211,9 @@ fn setup_system(mut commands: Commands) {
             ..Default::default()
         },
         Player,
-        Position(head.pos),
+        Position(Vec2::ZERO),
         Velocity(Vec2::new(VEL, 0.0)),
         Radius(f32::INFINITY),
-        head,
+        Head { tail: None },
     ));
 }
