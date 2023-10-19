@@ -6,11 +6,10 @@ use bevy_prototype_lyon::{entity::ShapeBundle, prelude::*, shapes::Circle};
 fn main() {
     App::new()
         .insert_resource(Msaa::Sample4)
-        .insert_resource(FixedTime::new_from_secs(TIMESTEP))
         .add_plugins(DefaultPlugins)
         .add_plugins(ShapePlugin)
         .add_systems(Startup, setup)
-        .add_systems(FixedUpdate, (
+        .add_systems(Update, (
             update_acceleration,
             update_positions,
             update_collisions,
@@ -86,7 +85,6 @@ impl Head {
 
 const RADIUS: f32 = 10.0;
 const VEL: f32 = 20.0;
-const TIMESTEP: f32 = 0.100;
 const EPSILON: f32 = 0.00001;
 fn update_acceleration(keys: Res<Input<KeyCode>>, mut query: Query<(&mut Radius), With<Player>>) {
     let mut r  = query.get_single_mut().unwrap();
@@ -107,13 +105,14 @@ fn update_collisions(mut query: Query<&Segment>) {
 }
 
 fn update_positions(
+    time: Res<Time>,
     mut query: Query<(&mut Position, &mut Velocity, &mut Head, &Radius, )>,
     mut q_lines: Query<&mut Line>,
     mut q_arcs: Query<&mut Arc>,
     mut commands: Commands,
 ) {
     for (mut p, mut v, mut h, r,) in query.iter_mut() {
-        let dt = TIMESTEP;
+        let dt = time.delta_seconds();
         let prev_pos = p.clone().0;
         if r.0.is_infinite() {
             *p = Position(p.0 + v.0*dt);
