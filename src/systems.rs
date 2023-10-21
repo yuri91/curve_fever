@@ -1,0 +1,159 @@
+use bevy::prelude::*;
+use bevy_prototype_lyon::prelude::*;
+use std::f32::consts::PI;
+
+use crate::components::*;
+use crate::collisions;
+
+const RADIUS: f32 = 10.0;
+const VEL: f32 = 20.0;
+const EPSILON: f32 = 0.00001;
+
+pub fn update_acceleration(keys: Res<Input<KeyCode>>, mut query: Query<&mut Radius, With<Player>>) {
+    let mut r  = query.get_single_mut().unwrap();
+    if keys.pressed(KeyCode::Left) {
+        *r = Radius(RADIUS);
+    } else if keys.pressed(KeyCode::Right) {
+        *r = Radius(-RADIUS);
+    } else {
+        *r = Radius(f32::INFINITY);
+    }
+}
+
+pub fn update_collisions(
+    q_heads: Query<(&Head, &Position, )>,
+    q_lines: Query<&Line>,
+    q_arcs: Query<&Arc>,
+) {
+    for (h, p) in q_heads.iter() {
+        let h_arc = Arc {
+            center: p.0,
+            from: p.0 + Vec2::new(h.radius, 0.),
+            radius: h.radius,
+            angle: 2.*PI,
+        };
+        for l in q_lines.iter() {
+            if collisions::arc_to_line(&h_arc, l) {
+                println!("LINE COLLISION!");
+            }
+        }
+        for a in q_arcs.iter() {
+            if collisions::arc_to_arc(&h_arc, a) {
+                println!("ARC COLLISION!");
+            }
+        }
+    }
+}
+
+pub fn update_positions(
+    time: Res<Time>,
+    mut query: Query<(&mut Position, &mut Velocity, &mut Head, &Radius, )>,
+    mut q_lines: Query<&mut Line>,
+    mut q_arcs: Query<&mut Arc>,
+    mut commands: Commands,
+) {
+    for (mut p, mut v, mut h, r,) in query.iter_mut() {
+        let dt = time.delta_seconds();
+        let prev_pos = p.clone().0;
+        if r.0.is_infinite() {
+            *p = Position(p.0 + v.0*dt);
+            if let Some(mut line) = h.tail.and_then(|t| q_lines.get_mut(t).ok()) {
+                line.to = p.0;
+            } else {
+                h.tail = Some(commands.spawn((
+                    Line {
+                        from: prev_pos,
+                        to: p.0,
+                    },
+                )).id());
+            }
+        } else {
+            let radius_vec = -v.0.perp().normalize();
+            let center = p.0 - radius_vec*r.0;
+            let rho = VEL/r.0;
+            let angle = rho*dt;
+            let new_radius_vec = Vec2::from_angle(angle).rotate(radius_vec);
+            let delta = (new_radius_vec - radius_vec)*r.0;
+            *p = Position(p.0 + delta);
+            *v = Velocity(new_radius_vec.perp()*v.0.length());
+            if let Some(mut arc) = h.tail.and_then(|t| q_arcs.get_mut(t).ok()).filter(|arc| (arc.center - center).length() < EPSILON)  {
+                arc.angle += angle;
+            } else {
+                h.tail = Some(commands.spawn((
+                    Arc {
+                        from: prev_pos,
+                        center,
+                        radius: r.0.abs(),
+                        angle,
+                    },
+                )).id());
+            }
+        }
+    }
+}
+
+pub fn update_lines(
+    q_lines: Query<(Entity, &Line,), Changed<Line>>,
+    mut commands: Commands,
+) {
+    for (e, l, ) in q_lines.iter() {
+        commands.entity(e).insert((
+            ShapeBundle {
+                path: l.to_path(),
+                ..default()
+            },
+            Stroke::new(Color::BLACK, 3.0),
+        ));
+    }
+}
+pub fn update_arcs(
+    q_arcs: Query<(Entity, &Arc,), Changed<Arc>>,
+    mut commands: Commands,
+) {
+    for (e, a, ) in q_arcs.iter() {
+        commands.entity(e).insert((
+            ShapeBundle {
+                path: a.to_path(),
+                ..default()
+            },
+            Stroke::new(Color::BLACK, 3.0),
+        ));
+    }
+}
+pub fn update_translation(
+    mut query: Query<(&mut Transform, &Position), Changed<Position>>,
+) {
+    for (mut t, p, ) in query.iter_mut() {
+        t.translation = p.0.extend(0.0);
+    }
+}
+
+pub fn update_heads(
+    q_heads: Query<(Entity, &Head, ), Changed<Head>>,
+    mut commands: Commands,
+) {
+    for (e, h, ) in q_heads.iter() {
+        commands.entity(e).insert((
+            ShapeBundle {
+                path: h.to_path(),
+                ..default()
+            },
+            Stroke::new(Color::BLACK, 3.0),
+        ));
+    }
+}
+
+pub fn setup(mut commands: Commands) {
+    commands.spawn(Camera2dBundle::default());
+    commands.spawn((
+        Name::new("Curve 1".to_owned()),
+        SpatialBundle {
+            ..Default::default()
+        },
+        Player,
+        Position(Vec2::ZERO),
+        Velocity(Vec2::new(VEL, 0.0)),
+        Radius(f32::INFINITY),
+        Head { radius: 5., tail: None },
+    ));
+}
