@@ -21,6 +21,7 @@ pub struct Segment;
 pub struct Line {
     pub from: Vec2,
     pub to: Vec2,
+    pub color: Color,
 }
 
 impl Line {
@@ -38,6 +39,7 @@ pub struct Arc {
     pub center: Vec2,
     pub radius: f32,
     pub angle: f32,
+    pub color: Color,
 }
 
 impl Arc {
@@ -52,6 +54,7 @@ impl Arc {
 #[derive(Component, Clone)]
 pub struct Head {
     pub radius: f32,
+    pub color: Color,
     pub tail: Option<Entity>
 }
 

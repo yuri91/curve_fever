@@ -7,7 +7,7 @@ use crate::collisions;
 
 const RADIUS: f32 = 10.0;
 const VEL: f32 = 20.0;
-const EPSILON: f32 = 0.00001;
+const EPSILON: f32 = 0.001;
 
 pub fn update_acceleration(keys: Res<Input<KeyCode>>, mut query: Query<&mut Radius, With<Player>>) {
     let mut r  = query.get_single_mut().unwrap();
@@ -21,25 +21,28 @@ pub fn update_acceleration(keys: Res<Input<KeyCode>>, mut query: Query<&mut Radi
 }
 
 pub fn update_collisions(
-    q_heads: Query<(&Head, &Position, )>,
-    q_lines: Query<&Line>,
-    q_arcs: Query<&Arc>,
+    q_heads: Query<(&Head, &Position, &Velocity )>,
+    mut q_lines: Query<&mut Line>,
+    mut q_arcs: Query<&mut Arc>,
 ) {
-    for (h, p) in q_heads.iter() {
+    for (h, p, v) in q_heads.iter() {
+        let v_dir = v.0.normalize()*h.radius;
+        let p_edge = Vec2::from_angle(-PI/2.0).rotate(v_dir) + p.0;
         let h_arc = Arc {
             center: p.0,
-            from: p.0 + Vec2::new(h.radius, 0.),
+            from: p_edge,
             radius: h.radius,
-            angle: 2.*PI,
+            angle: PI,
+            color: h.color,
         };
-        for l in q_lines.iter() {
-            if collisions::arc_to_line(&h_arc, l) {
-                println!("LINE COLLISION!");
+        for mut l in q_lines.iter_mut() {
+            if collisions::arc_to_line(&h_arc, &l) {
+                l.color = Color::RED;
             }
         }
-        for a in q_arcs.iter() {
-            if collisions::arc_to_arc(&h_arc, a) {
-                println!("ARC COLLISION!");
+        for mut a in q_arcs.iter_mut() {
+            if collisions::arc_to_arc(&h_arc, &a) {
+                a.color = Color::RED;
             }
         }
     }
@@ -64,6 +67,7 @@ pub fn update_positions(
                     Line {
                         from: prev_pos,
                         to: p.0,
+                        color: h.color,
                     },
                 )).id());
             }
@@ -85,6 +89,7 @@ pub fn update_positions(
                         center,
                         radius: r.0.abs(),
                         angle,
+                        color: h.color,
                     },
                 )).id());
             }
@@ -102,7 +107,7 @@ pub fn update_lines(
                 path: l.to_path(),
                 ..default()
             },
-            Stroke::new(Color::BLACK, 3.0),
+            Stroke::new(l.color, 3.0),
         ));
     }
 }
@@ -116,7 +121,7 @@ pub fn update_arcs(
                 path: a.to_path(),
                 ..default()
             },
-            Stroke::new(Color::BLACK, 3.0),
+            Stroke::new(a.color, 3.0),
         ));
     }
 }
@@ -138,7 +143,7 @@ pub fn update_heads(
                 path: h.to_path(),
                 ..default()
             },
-            Stroke::new(Color::BLACK, 3.0),
+            Stroke::new(h.color, 3.0),
         ));
     }
 }
@@ -154,6 +159,6 @@ pub fn setup(mut commands: Commands) {
         Position(Vec2::ZERO),
         Velocity(Vec2::new(VEL, 0.0)),
         Radius(f32::INFINITY),
-        Head { radius: 5., tail: None },
+        Head { radius: 5., color: Color::BLACK, tail: None },
     ));
 }
