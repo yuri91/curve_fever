@@ -1,12 +1,18 @@
 use crate::components::*;
 use bevy::prelude::*;
 
-pub fn line_to_line(l0: &Line, l1: &Line) -> bool {
-    false
-}
-
 pub fn arc_to_line(a: &Arc, l: &Line) -> bool {
-    false
+    match circle_to_line(a.radius, a.center, l.from, l.to) {
+        (Some(p0), Some(p1)) => {
+            point_in_arc(p0, &a) || point_in_arc(p1, &a)
+        },
+        (None, Some(p)) | (Some(p), None) => {
+            point_in_arc(p, &a)
+        },
+        (None, None) => {
+            false
+        }
+    }
 }
 
 pub fn arc_to_arc(a0: &Arc, a1: &Arc) -> bool {
@@ -21,6 +27,28 @@ pub fn arc_to_arc(a0: &Arc, a1: &Arc) -> bool {
     } else {
         false
     }
+}
+
+fn circle_to_line(r: f32, c0: Vec2, x0: Vec2, x1: Vec2) -> (Option<Vec2>, Option<Vec2>) {
+    let d = x1 - x0;
+    let f = x0 - c0;
+
+    let a = d.dot(d);
+    let b = 2.*f.dot(d);
+    let c = f.dot(f) - r*r;
+    
+    let delta2 = b*b - 4.*a*c;
+    if delta2 < 0. {
+        return (None, None);
+    }
+    let delta = delta2.sqrt();
+    let t0 = (-b - delta) / (2.*a);
+    let t1 = (-b + delta) / (2.*a);
+
+    (
+        Some(t0).filter(|&t| t >= 0. && t <= 1.).map(|t| x0 + t*d),
+        Some(t1).filter(|&t| t >= 0. && t <= 1.).map(|t| x0 + t*d),
+    )
 }
 
 fn point_in_arc(p: Vec2, a: &Arc) -> bool {

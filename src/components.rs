@@ -17,6 +17,9 @@ pub struct Radius(pub f32);
 #[derive(Component)]
 pub struct Segment;
 
+#[derive(Component, Clone, Copy)]
+pub struct ZIdx(pub f32);
+
 #[derive(Component, Clone)]
 pub struct Line {
     pub from: Vec2,

@@ -9,6 +9,9 @@ const RADIUS: f32 = 10.0;
 const VEL: f32 = 20.0;
 const EPSILON: f32 = 0.001;
 
+#[derive(Resource)]
+pub struct NextZIndex(pub u32);
+
 pub fn update_acceleration(keys: Res<Input<KeyCode>>, mut query: Query<&mut Radius, With<Player>>) {
     let mut r  = query.get_single_mut().unwrap();
     if keys.pressed(KeyCode::Left) {
@@ -50,6 +53,7 @@ pub fn update_collisions(
 
 pub fn update_positions(
     time: Res<Time>,
+    mut next_z: ResMut<NextZIndex>,
     mut query: Query<(&mut Position, &mut Velocity, &mut Head, &Radius, )>,
     mut q_lines: Query<&mut Line>,
     mut q_arcs: Query<&mut Arc>,
@@ -63,12 +67,14 @@ pub fn update_positions(
             if let Some(mut line) = h.tail.and_then(|t| q_lines.get_mut(t).ok()) {
                 line.to = p.0;
             } else {
+                next_z.as_mut().0 += 1;
                 h.tail = Some(commands.spawn((
                     Line {
                         from: prev_pos,
                         to: p.0,
                         color: h.color,
                     },
+                    ZIdx(next_z.0 as f32),
                 )).id());
             }
         } else {
@@ -83,6 +89,7 @@ pub fn update_positions(
             if let Some(mut arc) = h.tail.and_then(|t| q_arcs.get_mut(t).ok()).filter(|arc| (arc.center - center).length() < EPSILON)  {
                 arc.angle += angle;
             } else {
+                next_z.as_mut().0 += 1;
                 h.tail = Some(commands.spawn((
                     Arc {
                         from: prev_pos,
@@ -91,6 +98,7 @@ pub fn update_positions(
                         angle,
                         color: h.color,
                     },
+                    ZIdx(next_z.0 as f32),
                 )).id());
             }
         }
@@ -98,13 +106,17 @@ pub fn update_positions(
 }
 
 pub fn update_lines(
-    q_lines: Query<(Entity, &Line,), Changed<Line>>,
+    q_lines: Query<(Entity, &Line, &ZIdx), Changed<Line>>,
     mut commands: Commands,
 ) {
-    for (e, l, ) in q_lines.iter() {
+    for (e, l, z) in q_lines.iter() {
         commands.entity(e).insert((
             ShapeBundle {
                 path: l.to_path(),
+                transform: Transform {
+                    translation: Vec3::new(0., 0., z.0 as f32),
+                    ..default()
+                },
                 ..default()
             },
             Stroke::new(l.color, 3.0),
@@ -112,13 +124,17 @@ pub fn update_lines(
     }
 }
 pub fn update_arcs(
-    q_arcs: Query<(Entity, &Arc,), Changed<Arc>>,
+    q_arcs: Query<(Entity, &Arc, &ZIdx), Changed<Arc>>,
     mut commands: Commands,
 ) {
-    for (e, a, ) in q_arcs.iter() {
+    for (e, a, z) in q_arcs.iter() {
         commands.entity(e).insert((
             ShapeBundle {
                 path: a.to_path(),
+                transform: Transform {
+                    translation: Vec3::new(0., 0., z.0 as f32),
+                    ..default()
+                },
                 ..default()
             },
             Stroke::new(a.color, 3.0),
@@ -129,7 +145,7 @@ pub fn update_translation(
     mut query: Query<(&mut Transform, &Position), Changed<Position>>,
 ) {
     for (mut t, p, ) in query.iter_mut() {
-        t.translation = p.0.extend(0.0);
+        t.translation = p.0.extend(f32::MAX-1.);
     }
 }
 
@@ -141,6 +157,10 @@ pub fn update_heads(
         commands.entity(e).insert((
             ShapeBundle {
                 path: h.to_path(),
+                transform: Transform {
+                    translation: Vec3::new(0., 0., f32::MAX-1.),
+                    ..default()
+                },
                 ..default()
             },
             Stroke::new(h.color, 3.0),
@@ -149,12 +169,9 @@ pub fn update_heads(
 }
 
 pub fn setup(mut commands: Commands) {
-    commands.spawn(Camera2dBundle::default());
+    commands.spawn(Camera2dBundle::new_with_far(f32::MAX));
     commands.spawn((
         Name::new("Curve 1".to_owned()),
-        SpatialBundle {
-            ..Default::default()
-        },
         Player,
         Position(Vec2::ZERO),
         Velocity(Vec2::new(VEL, 0.0)),

@@ -8,6 +8,7 @@ mod systems;
 fn main() {
     App::new()
         .insert_resource(Msaa::Sample4)
+        .insert_resource(systems::NextZIndex(0))
         .add_plugins(DefaultPlugins)
         .add_plugins(ShapePlugin)
         .add_systems(Startup, systems::setup)
