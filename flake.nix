@@ -1,54 +1,72 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    systems.url = "github:nix-systems/default";
-    devenv.url = "github:cachix/devenv";
+
+    rust-overlay.url = "github:oxalica/rust-overlay";
+    rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
+
+    naersk.url = "github:nmattia/naersk";
+    naersk.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  nixConfig = {
-    extra-trusted-public-keys = "devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw=";
-    extra-substituters = "https://devenv.cachix.org";
-  };
-
-  outputs = { self, nixpkgs, devenv, systems, ... } @ inputs:
-    let
-      forEachSystem = nixpkgs.lib.genAttrs (import systems);
-    in
-    {
-      devShells = forEachSystem
-        (system:
-          let
-            pkgs = nixpkgs.legacyPackages.${system};
-          in
-          {
-            default = devenv.lib.mkShell {
-              inherit inputs pkgs;
-              modules = [
-                {
-                  # https://devenv.sh/reference/options/
-                  packages = with pkgs; [
-                    git
-                    cargo-edit
-                    alsa-lib
-                    xorg.libX11
-                    xorg.libXcursor
-                    xorg.libXi
-                    xorg.libXrandr
-                    libxkbcommon
-                    wayland
-                    udev
-                    vulkan-loader
-                    clang
-                    llvmPackages.bintools
-                  ];
-
-                  languages.rust.enable = true;
-
-                  enterShell = ''
-                  '';
-                }
-              ];
-            };
-          });
+  outputs = { self, nixpkgs, rust-overlay, naersk, ... } @ inputs:
+  let
+    system = "x86_64-linux";
+    pkgs = import nixpkgs {
+      inherit system;
+      overlays = [ rust-overlay.overlays.default ];
     };
+    rust-build = pkgs.rust-bin.stable.latest.default.override {
+      extensions = [ "rust-src" ];
+      targets = [];
+    };
+    naersk-lib = naersk.lib.${system}.override {
+      rustc = rust-build;
+      cargo = rust-build;
+    };
+    LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:${with pkgs; lib.makeLibraryPath [
+      udev alsa-lib vulkan-loader libxkbcommon wayland
+    ]}";
+    curve_fever = naersk-lib.buildPackage {
+      pname = "curve_fever";
+      root = ./.;
+      buildInputs = with pkgs; [
+        alsa-lib
+        xorg.libX11
+        xorg.libXcursor
+        xorg.libXi
+        xorg.libXrandr
+        libxkbcommon
+        wayland
+        udev
+        vulkan-loader
+      ];
+      nativeBuildInputs = with pkgs; [
+        pkg-config
+        clang
+        llvmPackages.bintools
+        makeWrapper
+        rust-build
+      ];
+      postInstall = ''
+        wrapProgram $out/bin/curve_fever \
+          --set LD_LIBRARY_PATH ${LD_LIBRARY_PATH}
+      '';
+    };
+  in
+  {
+    devShell.${system} = pkgs.mkShell {
+      packages = with pkgs; [
+        git
+        cargo-edit
+        rust-analyzer-unwrapped
+      ];
+      inputsFrom = with pkgs; [
+        curve_fever
+      ];
+      RUST_SRC_PATH = "${rust-build}/lib/rustlib/src/rust/library";
+      inherit LD_LIBRARY_PATH;
+    };
+    packages.${system}.default = curve_fever;
+  };
 }
