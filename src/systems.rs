@@ -3,7 +3,7 @@ use bevy_prototype_lyon::prelude::*;
 use std::f32::consts::PI;
 
 use crate::components::*;
-use crate::collisions;
+use crate::collisions::Collidable;
 
 const RADIUS: f32 = 10.0;
 const VEL: f32 = 20.0;
@@ -23,10 +23,10 @@ pub fn update_acceleration(keys: Res<Input<KeyCode>>, mut query: Query<&mut Radi
     }
 }
 
-pub fn update_collisions(
+pub fn update_collisions<C: Collidable+Component>(
     q_heads: Query<(&Head, &Position, &Velocity )>,
-    mut q_lines: Query<&mut Line>,
-    mut q_arcs: Query<&mut Arc>,
+    q_collidable: Query<(Entity, &mut C)>,
+    mut commands: Commands,
 ) {
     for (h, p, v) in q_heads.iter() {
         let v_dir = v.0.normalize()*h.radius;
@@ -38,14 +38,9 @@ pub fn update_collisions(
             angle: PI,
             color: h.color,
         };
-        for mut l in q_lines.iter_mut() {
-            if collisions::arc_to_line(&h_arc, &l) {
-                l.color = Color::RED;
-            }
-        }
-        for mut a in q_arcs.iter_mut() {
-            if collisions::arc_to_arc(&h_arc, &a) {
-                a.color = Color::RED;
+        for (e, c) in q_collidable.iter() {
+            if c.arc_collision(&h_arc) {
+                commands.entity(e).insert(Collided);
             }
         }
     }
@@ -105,66 +100,34 @@ pub fn update_positions(
     }
 }
 
-pub fn update_lines(
-    q_lines: Query<(Entity, &Line, &ZIdx), Changed<Line>>,
+pub fn update_paths<P: ToPath+Component>(
+    query: Query<(Entity, &P, &ZIdx, Option<&Collided>), Or<(Changed<P>, Added<Collided>)>>,
     mut commands: Commands,
 ) {
-    for (e, l, z) in q_lines.iter() {
+    for (e, p, z, c) in query.iter() {
+        let color = if c.is_some() {
+            Color::RED
+        } else {
+            Color::BLACK
+        };
         commands.entity(e).insert((
             ShapeBundle {
-                path: l.to_path(),
+                path: p.to_path(),
                 transform: Transform {
                     translation: Vec3::new(0., 0., z.0 as f32),
                     ..default()
                 },
                 ..default()
             },
-            Stroke::new(l.color, 3.0),
-        ));
-    }
-}
-pub fn update_arcs(
-    q_arcs: Query<(Entity, &Arc, &ZIdx), Changed<Arc>>,
-    mut commands: Commands,
-) {
-    for (e, a, z) in q_arcs.iter() {
-        commands.entity(e).insert((
-            ShapeBundle {
-                path: a.to_path(),
-                transform: Transform {
-                    translation: Vec3::new(0., 0., z.0 as f32),
-                    ..default()
-                },
-                ..default()
-            },
-            Stroke::new(a.color, 3.0),
+            Stroke::new(color, 3.0),
         ));
     }
 }
 pub fn update_translation(
-    mut query: Query<(&mut Transform, &Position), Changed<Position>>,
+    mut query: Query<(&mut Transform, &Position, &ZIdx), Changed<Position>>,
 ) {
-    for (mut t, p, ) in query.iter_mut() {
-        t.translation = p.0.extend(f32::MAX-1.);
-    }
-}
-
-pub fn update_heads(
-    q_heads: Query<(Entity, &Head, ), Changed<Head>>,
-    mut commands: Commands,
-) {
-    for (e, h, ) in q_heads.iter() {
-        commands.entity(e).insert((
-            ShapeBundle {
-                path: h.to_path(),
-                transform: Transform {
-                    translation: Vec3::new(0., 0., f32::MAX-1.),
-                    ..default()
-                },
-                ..default()
-            },
-            Stroke::new(h.color, 3.0),
-        ));
+    for (mut t, p, z, ) in query.iter_mut() {
+        t.translation = p.0.extend(z.0);
     }
 }
 
@@ -177,5 +140,6 @@ pub fn setup(mut commands: Commands) {
         Velocity(Vec2::new(VEL, 0.0)),
         Radius(f32::INFINITY),
         Head { radius: 5., color: Color::BLACK, tail: None },
+        ZIdx(f32::MAX-1.),
     ));
 }

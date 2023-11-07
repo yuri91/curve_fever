@@ -20,20 +20,14 @@ pub struct Segment;
 #[derive(Component, Clone, Copy)]
 pub struct ZIdx(pub f32);
 
+#[derive(Component, Clone, Copy)]
+pub struct Collided;
+
 #[derive(Component, Clone)]
 pub struct Line {
     pub from: Vec2,
     pub to: Vec2,
     pub color: Color,
-}
-
-impl Line {
-    pub fn to_path(&self) -> Path {
-        let mut builder = PathBuilder::new();
-        builder.move_to(self.from);
-        builder.line_to(self.to);
-        builder.build()
-    }
 }
 
 #[derive(Component, Clone)]
@@ -45,15 +39,6 @@ pub struct Arc {
     pub color: Color,
 }
 
-impl Arc {
-    pub fn to_path(&self) -> Path {
-        let mut builder = PathBuilder::new();
-        builder.move_to(self.from);
-        builder.arc(self.center, Vec2::new(self.radius, self.radius), self.angle, 0.0);
-        builder.build()
-    }
-}
-
 #[derive(Component, Clone)]
 pub struct Head {
     pub radius: f32,
@@ -61,11 +46,33 @@ pub struct Head {
     pub tail: Option<Entity>
 }
 
-impl Head {
-    pub fn to_path(&self) -> Path {
+pub trait ToPath {
+    fn to_path(&self) ->  Path;
+}
+impl ToPath for Line {
+    fn to_path(&self) ->  Path {
+        let mut builder = PathBuilder::new();
+        builder.move_to(self.from);
+        builder.line_to(self.to);
+        builder.build()
+    }
+}
+
+impl ToPath for Arc {
+    fn to_path(&self) ->  Path {
+        let mut builder = PathBuilder::new();
+        builder.move_to(self.from);
+        builder.arc(self.center, Vec2::new(self.radius, self.radius), self.angle, 0.0);
+        builder.build()
+    }
+}
+
+impl ToPath for Head {
+    fn to_path(&self) ->  Path {
         GeometryBuilder::build_as(&Circle {
             radius: self.radius,
             center: Vec2::ZERO,
         })
     }
 }
+

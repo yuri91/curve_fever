@@ -1,31 +1,39 @@
 use crate::components::*;
 use bevy::prelude::*;
 
-pub fn arc_to_line(a: &Arc, l: &Line) -> bool {
-    match circle_to_line(a.radius, a.center, l.from, l.to) {
-        (Some(p0), Some(p1)) => {
-            point_in_arc(p0, &a) || point_in_arc(p1, &a)
-        },
-        (None, Some(p)) | (Some(p), None) => {
-            point_in_arc(p, &a)
-        },
-        (None, None) => {
-            false
+pub trait Collidable {
+    fn arc_collision(&self, a: &Arc) -> bool;
+}
+
+impl Collidable for Line {
+    fn arc_collision(&self, a: &Arc) -> bool {
+        match circle_to_line(a.radius, a.center, self.from, self.to) {
+            (Some(p0), Some(p1)) => {
+                point_in_arc(p0, &a) || point_in_arc(p1, &a)
+            },
+            (None, Some(p)) | (Some(p), None) => {
+                point_in_arc(p, &a)
+            },
+            (None, None) => {
+                false
+            }
         }
     }
 }
 
-pub fn arc_to_arc(a0: &Arc, a1: &Arc) -> bool {
-    let r0 = a0.radius;
-    let r1 = a1.radius;
-    let p0 = a0.center;
-    let p1 = a1.center;
+impl Collidable for Arc {
+    fn arc_collision(&self, a: &Arc) -> bool {
+        let r0 = a.radius;
+        let r1 = self.radius;
+        let p0 = a.center;
+        let p1 = self.center;
 
-    if let Some((p2, p3)) = circle_to_circle(r0, p0, r1, p1) {
-        (point_in_arc(p2, &a0) && point_in_arc(p2, &a1)) ||
-        (point_in_arc(p3, &a0) && point_in_arc(p3, &a1))
-    } else {
-        false
+        if let Some((p2, p3)) = circle_to_circle(r0, p0, r1, p1) {
+            (point_in_arc(p2, &a) && point_in_arc(p2, self)) ||
+            (point_in_arc(p3, &a) && point_in_arc(p3, self))
+        } else {
+            false
+        }
     }
 }
 

@@ -15,8 +15,11 @@ fn main() {
         .add_systems(Update, (
             systems::update_acceleration,
             systems::update_positions,
-            systems::update_collisions,
-            (systems::update_lines, systems::update_arcs, systems::update_heads),
+            systems::update_collisions::<components::Line>,
+            systems::update_collisions::<components::Arc>,
+            systems::update_paths::<components::Line>,
+            systems::update_paths::<components::Arc>,
+            systems::update_paths::<components::Head>,
         ).chain())
         .add_systems(PostUpdate, (
             systems::update_translation,
