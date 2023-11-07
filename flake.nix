@@ -25,21 +25,31 @@
       cargo = rust-build;
     };
     LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:${with pkgs; lib.makeLibraryPath [
-      udev alsa-lib vulkan-loader libxkbcommon wayland
+      udev
+      alsa-lib
+      vulkan-loader
+      libglvnd
+      libxkbcommon
+      xorg.libX11
+      xorg.libXcursor
+      xorg.libXi
+      xorg.libXrandr
+      wayland
     ]}";
     curve_fever = naersk-lib.buildPackage {
       pname = "curve_fever";
       root = ./.;
       buildInputs = with pkgs; [
         alsa-lib
+        libxkbcommon
         xorg.libX11
         xorg.libXcursor
         xorg.libXi
         xorg.libXrandr
-        libxkbcommon
+        libglvnd
         wayland
-        udev
         vulkan-loader
+        udev
       ];
       nativeBuildInputs = with pkgs; [
         pkg-config
